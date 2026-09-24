@@ -191,54 +191,90 @@ with tabs[1]:
 
 
 # ==========================================
-# ABA 3: PAINEL ANALÍTICO
+# ==========================================
+# ABA 3: PAINEL ANALÍTICO (AUDIENCE MEASUREMENT)
 # ==========================================
 with tabs[2]:
-    st.subheader("Métricas de Tráfego e Engajamento (Leitura SQLite)")
-    
-    col_act, _ = st.columns([1, 3])
-    with col_act:
-        if st.button("🔄 Atualizar Métricas"):
+    st.subheader("Audience Measurement — Métricas de Fluxo e Engajamento")
+    st.caption("Consolidação estatística em série temporal de tráfego, atratividade e atenção na bancada.")
+
+    col_btn1, col_btn2, _ = st.columns([1, 1.5, 2.5])
+    with col_btn1:
+        if st.button("🔄 Atualizar Métricas", use_container_width=True):
+            st.rerun()
+    with col_btn2:
+        if st.button("⚡ Consolidar Janela Agora (Demo)", type="secondary", use_container_width=True, help="Executa o agregador estatístico imediatamente para demonstração ao vivo sem aguardar o ciclo de 5 minutos"):
+            novo_id = db.agregar_janela(janela_segundos=300.0)
+            st.toast(f"Janela estatística #{novo_id} consolidada com sucesso!", icon="📊")
+            time.sleep(0.5)
             st.rerun()
 
-    # Cards KPI
+    # Cards KPI Consolidados (Terminologia de Mercado)
     resumo = db.obter_resumo_geral()
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Visitantes Únicos", resumo["total_visitantes"])
-    k2.metric("Permanência Média no Stand", f"{resumo['tempo_medio_zona']} s")
-    k3.metric("Engajamentos Válidos (≥3s)", resumo["total_engajamentos_validos"])
-    k4.metric("Score Médio de Atenção", f"{int(resumo['score_medio'] * 100)} %")
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric("👣 Footfall (Fluxo)", f"{resumo['total_visitantes']}", help="Total de pessoas únicas detectadas na área monitorada")
+    k2.metric("🎯 Engajamentos Válidos", f"{resumo['total_engajamentos_validos']}", help="Visitantes que permaneceram na bancada por 3 segundos ou mais")
+    k3.metric("⚡ Taxa de Captura", f"{int(resumo['capture_rate'] * 100)} %", help="Proporção de passantes que efetivamente engajaram na bancada (Engajamentos / Footfall)")
+    k4.metric("⏱️ Dwell Time Médio", f"{resumo['dwell_medio']} s", help="Tempo médio de permanência ativa diante da bancada")
+    k5.metric("⭐ Atenção Qualificada", f"{int(resumo['engagement_rate'] * 100)} %", help="Proporção de sessões que mantiveram alto foco e atenção direta (Score >= 0.40)")
 
     st.divider()
 
-    # Gráficos a partir das tabelas SQLite
+    # Gráficos em Série Temporal a partir do SQLite
     conn = sqlite3.connect(cfg.db_path)
     try:
-        df_traj = pd.read_sql_query("SELECT id, track_id, datetime(inicio_ts, 'unixepoch', 'localtime') as inicio, tempo_na_zona FROM sessoes_trajetoria ORDER BY id DESC LIMIT 100", conn)
-        df_eng = pd.read_sql_query("SELECT id, sessao_id, datetime(inicio_ts, 'unixepoch', 'localtime') as inicio, dwell_time, facing_time, engagement_score FROM sessoes_engajamento WHERE dwell_time >= 3.0 ORDER BY id DESC LIMIT 100", conn)
+        # Gráficos de Séries Temporais (Ordenados cronologicamente do passado para o presente)
+        st.markdown("#### Evolução Temporal: Fluxo de Público × Engajamento")
+        
+        query_agg = """
+        SELECT id, 
+               datetime(janela_inicio, 'unixepoch', 'localtime') as Horario, 
+               visitantes_unicos as "Fluxo (Footfall)", 
+               engajamentos_validos as "Engajamentos na Bancada",
+               ROUND(capture_rate * 100, 1) as "Taxa de Captura (%)",
+               ROUND(engagement_rate * 100, 1) as "Taxa de Atenção (%)",
+               ROUND(score_medio * 100, 1) as "Score de Foco (%)"
+        FROM agregados_janela 
+        ORDER BY id ASC 
+        LIMIT 40
+        """
+        df_agg = pd.read_sql_query(query_agg, conn)
+
+        if not df_agg.empty:
+            cg1, cg2 = st.columns(2)
+            with cg1:
+                st.markdown("**Comparativo de Volume: Footfall vs. Engajamentos**")
+                st.line_chart(df_agg.set_index("Horario")[["Fluxo (Footfall)", "Engajamentos na Bancada"]])
+            with cg2:
+                st.markdown("**Taxa de Conversão da Bancada (% de Captura)**")
+                st.bar_chart(df_agg.set_index("Horario")[["Taxa de Captura (%)", "Taxa de Atenção (%)"]])
+        else:
+            st.info("💡 Nenhuma janela estatística consolidada ainda. Clique em **'⚡ Consolidar Janela Agora (Demo)'** acima para gerar a primeira amostra imediatamente!")
+
+        # Ressalva metodológica e privacidade (Seção 4 do Complemento)
+        st.caption("🔒 **Privacidade & Conformidade**: Rastreamento 100% anônimo por visão computacional geométrica e pose tracking. Sem reconhecimento facial, sem gravação de imagens pessoais e sem retenção de biometria.")
+        st.caption("ℹ️ **Nota Técnica de Fluxo**: Em momentos de adensamento na feira, oclusões visuais temporárias podem gerar novos identificadores de rastreio, característica documentada e esperada em sistemas de visão anônima.")
+
+        st.divider()
+
+        # Tabelas de Auditoria de Sessões Recentes
+        df_traj = pd.read_sql_query("SELECT id, track_id as 'ID Rastreado', datetime(inicio_ts, 'unixepoch', 'localtime') as 'Início', ROUND(tempo_na_zona, 1) as 'Tempo Bancada (s)' FROM sessoes_trajetoria ORDER BY id DESC LIMIT 50", conn)
+        df_eng = pd.read_sql_query("SELECT id, sessao_id as 'Sessão', datetime(inicio_ts, 'unixepoch', 'localtime') as 'Início', ROUND(dwell_time, 1) as 'Dwell (s)', ROUND(facing_time, 1) as 'Foco (s)', ROUND(engagement_score * 100, 1) as 'Score (%)' FROM sessoes_engajamento WHERE dwell_time >= 3.0 ORDER BY id DESC LIMIT 50", conn)
         
         c_left, c_right = st.columns(2)
         with c_left:
-            st.markdown("#### Últimas Sessões no Stand (Trajetória)")
+            st.markdown("#### Últimas Passagens Registradas (Trajetória)")
             if not df_traj.empty:
-                st.dataframe(df_traj, use_container_width=True)
+                st.dataframe(df_traj, use_container_width=True, height=220)
             else:
                 st.info("Nenhuma sessão de trajetória registrada ainda.")
 
         with c_right:
-            st.markdown("#### Últimas Sessões de Engajamento Válidas")
+            st.markdown("#### Últimos Engajamentos Válidos (≥ 3s)")
             if not df_eng.empty:
-                st.dataframe(df_eng, use_container_width=True)
+                st.dataframe(df_eng, use_container_width=True, height=220)
             else:
                 st.info("Nenhuma sessão de engajamento registrada ainda.")
-
-        # Consolidação de janelas
-        st.markdown("#### Histórico Agregado de Janelas (5 min)")
-        df_agg = pd.read_sql_query("SELECT id, datetime(janela_inicio, 'unixepoch', 'localtime') as inicio, visitantes_unicos, tempo_medio_zona, engajamentos_validos, score_medio FROM agregados_janela ORDER BY id DESC LIMIT 20", conn)
-        if not df_agg.empty:
-            st.line_chart(df_agg.set_index("inicio")[["visitantes_unicos", "engajamentos_validos"]])
-        else:
-            st.caption("Ainda não há janelas agregadas. O agregador consolida os dados automaticamente a cada 5 minutos.")
 
     except Exception as e:
         st.warning(f"Banco de dados ainda sem dados para exibição: {e}")
