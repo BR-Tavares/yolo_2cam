@@ -208,6 +208,103 @@ class Database:
                 "engagement_rate": eng_rate
             }
 
+    def obter_resumo_periodo(self, segundos_atras: Optional[float] = None) -> Dict[str, Any]:
+        """Obtém totais executivos dinamicamente filtrados por período temporal."""
+        LIMIAR_QUALIDADE = 0.40
+        now = time.time()
+        filtro_traj = ""
+        filtro_eng = ""
+        params_traj = []
+        params_eng = [LIMIAR_QUALIDADE]
+
+        if segundos_atras is not None:
+            cutoff = now - segundos_atras
+            filtro_traj = "WHERE inicio_ts >= ?"
+            filtro_eng = "AND inicio_ts >= ?"
+            params_traj.append(cutoff)
+            params_eng.append(cutoff)
+
+        with self._get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(f"SELECT COUNT(DISTINCT track_id) as total_visitantes, AVG(tempo_na_zona) as media_tempo_zona FROM sessoes_trajetoria {filtro_traj}", params_traj)
+            r1 = cur.fetchone()
+
+            cur.execute(f"""
+                SELECT COUNT(*) as total_engajados, 
+                       AVG(dwell_time) as media_dwell, 
+                       AVG(engagement_score) as media_score,
+                       SUM(CASE WHEN engagement_score >= ? THEN 1 ELSE 0 END) as total_qualificados
+                FROM sessoes_engajamento WHERE dwell_time >= 3.0 {filtro_eng}
+            """, params_eng)
+            r2 = cur.fetchone()
+
+            tot_vis = r1["total_visitantes"] or 0
+            tot_eng = r2["total_engajados"] or 0
+            tot_qual = r2["total_qualificados"] or 0
+
+            cap_rate = round(min(1.0, tot_eng / float(tot_vis)), 3) if tot_vis > 0 else (1.0 if tot_eng > 0 else 0.0)
+            eng_rate = round(tot_qual / float(tot_eng), 3) if tot_eng > 0 else 0.0
+
+            return {
+                "total_visitantes": tot_vis,
+                "tempo_medio_zona": round(r1["media_tempo_zona"] or 0.0, 1),
+                "total_engajamentos_validos": tot_eng,
+                "dwell_medio": round(r2["media_dwell"] or 0.0, 1),
+                "score_medio": round(r2["media_score"] or 0.0, 2),
+                "capture_rate": cap_rate,
+                "engagement_rate": eng_rate
+            }
+
+    def obter_serie_temporal(self, segundos_atras: Optional[float] = 3600):
+        """Gera a série temporal de fluxo e engajamentos agrupada automaticamente por minuto."""
+        import pandas as pd
+        now = time.time()
+        params = []
+        where_traj = ""
+        where_eng = ""
+        if segundos_atras is not None:
+            cutoff = now - segundos_atras
+            where_traj = "WHERE inicio_ts >= ?"
+            where_eng = "WHERE inicio_ts >= ? AND dwell_time >= 3.0"
+            params = [cutoff]
+        else:
+            where_eng = "WHERE dwell_time >= 3.0"
+
+        with self._get_connection() as conn:
+            q1 = f"""
+            SELECT 
+                strftime('%H:%M', datetime(inicio_ts, 'unixepoch', 'localtime')) as Horario,
+                COUNT(DISTINCT track_id) as "Fluxo (Footfall)"
+            FROM sessoes_trajetoria
+            {where_traj}
+            GROUP BY Horario
+            ORDER BY Horario ASC
+            """
+            df_traj = pd.read_sql_query(q1, conn, params=params)
+
+            q2 = f"""
+            SELECT 
+                strftime('%H:%M', datetime(inicio_ts, 'unixepoch', 'localtime')) as Horario,
+                COUNT(*) as "Engajamentos na Bancada",
+                ROUND(AVG(dwell_time), 1) as "Dwell Médio (s)",
+                ROUND(AVG(engagement_score) * 100, 1) as "Score Atenção (%)"
+            FROM sessoes_engajamento
+            {where_eng}
+            GROUP BY Horario
+            ORDER BY Horario ASC
+            """
+            df_eng = pd.read_sql_query(q2, conn, params=params)
+
+            if df_traj.empty and df_eng.empty:
+                return pd.DataFrame()
+
+            df_merged = pd.merge(df_traj, df_eng, on='Horario', how='outer').fillna(0).sort_values('Horario')
+            df_merged['Taxa de Captura (%)'] = (
+                df_merged['Engajamentos na Bancada'] / df_merged['Fluxo (Footfall)'].replace(0, 1) * 100
+            ).clip(upper=100.0).round(1)
+
+            return df_merged
+
     def limpar_historico(self):
         """Limpa as tabelas de histórico para reiniciar a contagem da feira do zero."""
         with self._get_connection() as conn:
