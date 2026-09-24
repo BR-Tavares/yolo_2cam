@@ -5,6 +5,7 @@ from typing import Optional, List, Dict, Any
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS sessoes_trajetoria (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessao_uid TEXT UNIQUE,
     track_id INTEGER,
     inicio_ts REAL,
     fim_ts REAL,
@@ -13,6 +14,7 @@ CREATE TABLE IF NOT EXISTS sessoes_trajetoria (
 
 CREATE TABLE IF NOT EXISTS sessoes_engajamento (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessao_uid TEXT UNIQUE,
     sessao_id TEXT,
     inicio_ts REAL,
     fim_ts REAL,
@@ -53,28 +55,58 @@ class Database:
                     conn.execute(f"ALTER TABLE agregados_janela ADD COLUMN {col} REAL")
                 except Exception:
                     pass
+
+            # Migração suave de sessao_uid e índices únicos para upsert
+            try:
+                conn.execute("ALTER TABLE sessoes_trajetoria ADD COLUMN sessao_uid TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_traj_uid ON sessoes_trajetoria(sessao_uid)")
+            except Exception:
+                pass
+
+            try:
+                conn.execute("ALTER TABLE sessoes_engajamento ADD COLUMN sessao_uid TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_eng_uid ON sessoes_engajamento(sessao_uid)")
+            except Exception:
+                pass
+
             conn.commit()
 
-    def salvar_sessao_trajetoria(self, track_id: int, inicio_ts: float, fim_ts: float, tempo_na_zona: float):
+    def salvar_sessao_trajetoria(self, track_id: int, inicio_ts: float, fim_ts: float, tempo_na_zona: float, sessao_uid: Optional[str] = None):
+        uid = sessao_uid or f"traj_{track_id}_{int(inicio_ts)}"
         with self._get_connection() as conn:
             conn.execute(
                 """
-                INSERT INTO sessoes_trajetoria (track_id, inicio_ts, fim_ts, tempo_na_zona)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO sessoes_trajetoria (sessao_uid, track_id, inicio_ts, fim_ts, tempo_na_zona)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(sessao_uid) DO UPDATE SET
+                    fim_ts = excluded.fim_ts,
+                    tempo_na_zona = excluded.tempo_na_zona
                 """,
-                (int(track_id), float(inicio_ts), float(fim_ts), float(tempo_na_zona))
+                (str(uid), int(track_id), float(inicio_ts), float(fim_ts), float(tempo_na_zona))
             )
             conn.commit()
 
     def salvar_sessao_engajamento(self, sessao_id: str, inicio_ts: float, fim_ts: float,
-                                  dwell_time: float, facing_time: float, engagement_score: float):
+                                  dwell_time: float, facing_time: float, engagement_score: float, sessao_uid: Optional[str] = None):
+        uid = sessao_uid or f"eng_{sessao_id}_{int(inicio_ts)}"
         with self._get_connection() as conn:
             conn.execute(
                 """
-                INSERT INTO sessoes_engajamento (sessao_id, inicio_ts, fim_ts, dwell_time, facing_time, engagement_score)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO sessoes_engajamento (sessao_uid, sessao_id, inicio_ts, fim_ts, dwell_time, facing_time, engagement_score)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(sessao_uid) DO UPDATE SET
+                    fim_ts = excluded.fim_ts,
+                    dwell_time = excluded.dwell_time,
+                    facing_time = excluded.facing_time,
+                    engagement_score = excluded.engagement_score
                 """,
-                (str(sessao_id), float(inicio_ts), float(fim_ts), float(dwell_time), float(facing_time), float(engagement_score))
+                (str(uid), str(sessao_id), float(inicio_ts), float(fim_ts), float(dwell_time), float(facing_time), float(engagement_score))
             )
             conn.commit()
 

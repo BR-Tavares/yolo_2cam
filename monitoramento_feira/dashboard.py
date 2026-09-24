@@ -218,9 +218,16 @@ with tabs[2]:
         if st.button("🔄 Atualizar", use_container_width=True, help="Recarrega a leitura dos dados do banco sem apagar nada"):
             st.rerun()
     with col_btn2:
-        if st.button("⚡ Consolidar Janela", type="secondary", use_container_width=True, help="Executa o agregador estatístico imediatamente para demonstração ao vivo sem aguardar o ciclo de 5 minutos"):
-            novo_id = db.agregar_janela(janela_segundos=300.0)
-            st.toast(f"Janela estatística #{novo_id} consolidada com sucesso!", icon="📊")
+        if st.button("⚡ Consolidar Janela", type="secondary", use_container_width=True, help="Grava quem está na câmera agora e executa o agregador estatístico para demonstração ao vivo"):
+            try:
+                import urllib.request, json
+                req = urllib.request.Request(f"http://localhost:{cfg.api_port}/api/consolidar", data=b"{}", headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=2.0) as resp:
+                    res_json = json.loads(resp.read().decode())
+                    nid = res_json.get("janela_id", 1)
+            except Exception:
+                nid = db.agregar_janela(janela_segundos=300.0)
+            st.toast(f"Janela estatística #{nid} consolidada com sucesso!", icon="📊")
             time.sleep(0.5)
             st.rerun()
     with col_btn3:

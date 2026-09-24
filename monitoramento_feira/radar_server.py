@@ -27,6 +27,7 @@ engagement_state = None
 camera_manager = None
 modelo_trajetoria = None
 app_config = None
+database = None
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
@@ -136,3 +137,18 @@ def api_reset():
         with engagement_state.lock:
             engagement_state.active.clear()
     return {"success": True, "message": "Memória de rastreamento resetada com sucesso"}
+
+@app.post("/api/consolidar")
+def api_consolidar():
+    global trajectory_state, engagement_state, database
+    # 1. Força a sincronização imediata de quem está na câmera agora
+    if trajectory_state and hasattr(trajectory_state, "sincronizar_ativos_agora"):
+        trajectory_state.sincronizar_ativos_agora()
+    if engagement_state and hasattr(engagement_state, "sincronizar_ativos_agora"):
+        engagement_state.sincronizar_ativos_agora()
+
+    # 2. Fecha e grava a janela estatística
+    novo_id = None
+    if database:
+        novo_id = database.agregar_janela(janela_segundos=300.0)
+    return {"success": True, "janela_id": novo_id}

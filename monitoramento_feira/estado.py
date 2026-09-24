@@ -13,9 +13,12 @@ class TrajectoryState:
 
     def update_track(self, track_id: int, pos_radar: List[float], na_zona: bool, olhando: bool = False):
         now = time.time()
+        to_sync = None
         with self.lock:
             if track_id not in self.active:
+                sessao_uid = f"traj_{track_id}_{int(now)}"
                 self.active[track_id] = {
+                    "sessao_uid": sessao_uid,
                     "start_ts": now,
                     "last_seen": now,
                     "trail": [pos_radar],
@@ -23,7 +26,8 @@ class TrajectoryState:
                     "zone_time_total": 0.0,
                     "na_zona": na_zona,
                     "olhando": olhando,
-                    "current_pos": pos_radar
+                    "current_pos": pos_radar,
+                    "last_db_sync": now
                 }
             else:
                 data = self.active[track_id]
@@ -46,6 +50,48 @@ class TrajectoryState:
                     data["zone_enter_ts"] = None
                 data["na_zona"] = na_zona
 
+                # Sincronização contínua com SQLite (a cada 2.5s se já tiver pelo menos 1.0s de passagem)
+                if (now - data["start_ts"] >= 1.0) and (now - data.get("last_db_sync", 0.0) >= 2.5):
+                    data["last_db_sync"] = now
+                    to_sync = (data["sessao_uid"], track_id, data["start_ts"], now, data["zone_time_total"])
+
+        if to_sync:
+            try:
+                self.db.salvar_sessao_trajetoria(
+                    track_id=to_sync[1],
+                    inicio_ts=to_sync[2],
+                    fim_ts=to_sync[3],
+                    tempo_na_zona=to_sync[4],
+                    sessao_uid=to_sync[0]
+                )
+            except Exception:
+                pass
+
+    def sincronizar_ativos_agora(self):
+        """Persiste imediatamente todas as trajetórias ativas relevantes no SQLite."""
+        now = time.time()
+        to_save = []
+        with self.lock:
+            for track_id, data in self.active.items():
+                if now - data["start_ts"] >= 1.0:
+                    to_save.append((
+                        data.get("sessao_uid", f"traj_{track_id}_{int(data['start_ts'])}"),
+                        track_id,
+                        data["start_ts"],
+                        now,
+                        data["zone_time_total"]
+                    ))
+        for s in to_save:
+            try:
+                self.db.salvar_sessao_trajetoria(
+                    track_id=s[1],
+                    inicio_ts=s[2],
+                    fim_ts=s[3],
+                    tempo_na_zona=s[4],
+                    sessao_uid=s[0]
+                )
+            except Exception:
+                pass
 
     def cleanup_expired(self):
         now = time.time()
@@ -53,24 +99,27 @@ class TrajectoryState:
         with self.lock:
             for track_id, data in list(self.active.items()):
                 if now - data["last_seen"] > self.timeout:
-                    expired_sessions.append((
-                        track_id,
-                        data["start_ts"],
-                        data["last_seen"],
-                        data["zone_time_total"]
-                    ))
+                    if now - data["start_ts"] >= 1.0:
+                        expired_sessions.append((
+                            data.get("sessao_uid", f"traj_{track_id}_{int(data['start_ts'])}"),
+                            track_id,
+                            data["start_ts"],
+                            data["last_seen"],
+                            data["zone_time_total"]
+                        ))
                     del self.active[track_id]
 
         for s in expired_sessions:
             try:
                 self.db.salvar_sessao_trajetoria(
-                    track_id=s[0],
-                    inicio_ts=s[1],
-                    fim_ts=s[2],
-                    tempo_na_zona=s[3]
+                    track_id=s[1],
+                    inicio_ts=s[2],
+                    fim_ts=s[3],
+                    tempo_na_zona=s[4],
+                    sessao_uid=s[0]
                 )
             except Exception as e:
-                print(f"[TrajectoryState] Erro ao persistir sessão {s[0]}: {e}")
+                print(f"[TrajectoryState] Erro ao persistir sessão {s[1]}: {e}")
 
     def get_snapshot(self) -> List[Dict[str, Any]]:
         with self.lock:
@@ -100,9 +149,12 @@ class EngagementState:
 
     def update_face(self, face_session_id: str, facing: bool, yaw: float, pitch: float, bbox: List[float]):
         now = time.time()
+        to_sync = None
         with self.lock:
             if face_session_id not in self.active:
+                sessao_uid = f"eng_{face_session_id}_{int(now)}"
                 self.active[face_session_id] = {
+                    "sessao_uid": sessao_uid,
                     "start_ts": now,
                     "last_seen": now,
                     "facing_time": 0.0,
@@ -111,7 +163,8 @@ class EngagementState:
                     "yaw": yaw,
                     "pitch": pitch,
                     "bbox": bbox,
-                    "engagement_score": 0.0
+                    "engagement_score": 0.0,
+                    "last_db_sync": 0.0
                 }
             else:
                 data = self.active[face_session_id]
@@ -132,6 +185,63 @@ class EngagementState:
                     saturacao = min(1.0, data["dwell_time"] / self.saturation_dwell)
                     data["engagement_score"] = round(proporcao * saturacao, 3)
 
+                # Se a pessoa já atingiu min_dwell (>= 3s), sincroniza periodicamente no SQLite (a cada 2.0s)
+                if (data["dwell_time"] >= self.min_dwell) and (now - data.get("last_db_sync", 0.0) >= 2.0):
+                    data["last_db_sync"] = now
+                    to_sync = (
+                        data["sessao_uid"],
+                        face_session_id,
+                        data["start_ts"],
+                        now,
+                        data["dwell_time"],
+                        data["facing_time"],
+                        data["engagement_score"]
+                    )
+
+        if to_sync:
+            try:
+                self.db.salvar_sessao_engajamento(
+                    sessao_id=to_sync[1],
+                    inicio_ts=to_sync[2],
+                    fim_ts=to_sync[3],
+                    dwell_time=to_sync[4],
+                    facing_time=to_sync[5],
+                    engagement_score=to_sync[6],
+                    sessao_uid=to_sync[0]
+                )
+            except Exception:
+                pass
+
+    def sincronizar_ativos_agora(self):
+        """Persiste imediatamente todos os engajamentos válidos ativos no SQLite."""
+        now = time.time()
+        to_save = []
+        with self.lock:
+            for fid, data in self.active.items():
+                if data["dwell_time"] >= self.min_dwell:
+                    to_save.append((
+                        data.get("sessao_uid", f"eng_{fid}_{int(data['start_ts'])}"),
+                        fid,
+                        data["start_ts"],
+                        now,
+                        data["dwell_time"],
+                        data["facing_time"],
+                        data["engagement_score"]
+                    ))
+        for s in to_save:
+            try:
+                self.db.salvar_sessao_engajamento(
+                    sessao_id=s[1],
+                    inicio_ts=s[2],
+                    fim_ts=s[3],
+                    dwell_time=s[4],
+                    facing_time=s[5],
+                    engagement_score=s[6],
+                    sessao_uid=s[0]
+                )
+            except Exception:
+                pass
+
     def cleanup_expired(self):
         now = time.time()
         expired_sessions = []
@@ -141,6 +251,7 @@ class EngagementState:
                     # Só persiste se dwell_time >= min_dwell (conforme Seção 5 e 11)
                     if data["dwell_time"] >= self.min_dwell:
                         expired_sessions.append((
+                            data.get("sessao_uid", f"eng_{fid}_{int(data['start_ts'])}"),
                             fid,
                             data["start_ts"],
                             data["last_seen"],
@@ -153,15 +264,16 @@ class EngagementState:
         for s in expired_sessions:
             try:
                 self.db.salvar_sessao_engajamento(
-                    sessao_id=s[0],
-                    inicio_ts=s[1],
-                    fim_ts=s[2],
-                    dwell_time=s[3],
-                    facing_time=s[4],
-                    engagement_score=s[5]
+                    sessao_id=s[1],
+                    inicio_ts=s[2],
+                    fim_ts=s[3],
+                    dwell_time=s[4],
+                    facing_time=s[5],
+                    engagement_score=s[6],
+                    sessao_uid=s[0]
                 )
             except Exception as e:
-                print(f"[EngagementState] Erro ao persistir engajamento {s[0]}: {e}")
+                print(f"[EngagementState] Erro ao persistir engajamento {s[1]}: {e}")
 
     def get_snapshot(self) -> Dict[str, Any]:
         with self.lock:

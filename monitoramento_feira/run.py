@@ -52,6 +52,7 @@ class FeiraSystem:
         radar_server.camera_manager = self.camera_mgr
         radar_server.modelo_trajetoria = self.mod_traj
         radar_server.app_config = self.config
+        radar_server.database = self.db
 
         self.running = False
         self.last_annotated_a = None
