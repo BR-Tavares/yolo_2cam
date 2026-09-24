@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitoramento de Fluxo do Stand</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background-color: #030712;
+            color: #f8fafc;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        #canvas-wrapper {
+            position: relative;
+            width: min(94vw, 130vh);
+            height: min(94vh, 68vw);
+            background: radial-gradient(circle at 50% 90%, #0d1b2a 0%, #030712 85%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), inset 0 0 80px rgba(13, 27, 42, 0.6);
+            overflow: hidden;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .header-hud {
+            position: absolute;
+            top: 24px;
+            left: 28px;
+            pointer-events: none;
+        }
+        .header-hud h1 {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #f8fafc;
+        }
+        .header-hud p {
+            font-size: 13px;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+        .legend-hud {
+            position: absolute;
+            top: 24px;
+            right: 28px;
+            display: flex;
+            gap: 16px;
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(10px);
+            padding: 10px 20px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 13px;
+            font-weight: 600;
+            pointer-events: none;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .dot {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+        }
+        .dot-green {
+            background-color: #00ff88;
+            box-shadow: 0 0 10px #00ff88;
+        }
+        .dot-blue {
+            background-color: #00e5ff;
+            box-shadow: 0 0 10px #00e5ff;
+        }
+        .dot-orange {
+            background-color: #ff8800;
+            box-shadow: 0 0 10px #ff8800;
+        }
+        .count-val {
+            font-size: 15px;
+            font-weight: 800;
+            margin-left: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-wrapper">
+        <div class="header-hud">
+            <h1>Fluxo do Stand</h1>
+            <p>Trajetória Espacial dos Visitantes</p>
+        </div>
+
+        <div class="legend-hud">
+            <div class="legend-item">
+                <div class="dot dot-green"></div>
+                <span>Na Bancada:</span>
+                <span id="countBancada" class="count-val" style="color: #00ff88;">0</span>
+            </div>
+            <div class="legend-item">
+                <div class="dot dot-blue"></div>
+                <span>Olhando p/ Stand:</span>
+                <span id="countAtencao" class="count-val" style="color: #00e5ff;">0</span>
+            </div>
+            <div class="legend-item">
+                <div class="dot dot-orange"></div>
+                <span>Em Trânsito:</span>
+                <span id="countTransito" class="count-val" style="color: #ff8800;">0</span>
+            </div>
+        </div>
+
+        <canvas id="flowCanvas" width="1200" height="800"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('flowCanvas');
+        const ctx = canvas.getContext('2d');
+        const countBancadaEl = document.getElementById('countBancada');
+        const countAtencaoEl = document.getElementById('countAtencao');
+        const countTransitoEl = document.getElementById('countTransito');
+
+        let tracks = [];
+        let particles = [];
+
+        async function fetchTracks() {
+            try {
+                const res = await fetch('/api/radar');
+                if (res.ok) {
+                    const data = await res.json();
+                    tracks = data.tracks || [];
+                    
+                    let bancada = 0;
+                    let atencao = 0;
+                    let transito = 0;
+
+                    tracks.forEach(t => {
+                        if (t.na_zona) bancada++;
+                        else if (t.olhando) atencao++;
+                        else transito++;
+                    });
+
+                    countBancadaEl.textContent = bancada;
+                    countAtencaoEl.textContent = atencao;
+                    countTransitoEl.textContent = transito;
+                }
+            } catch (e) {
+                // Silencioso em caso de reconexão
+            }
+        }
+        setInterval(fetchTracks, 200);
+
+        function drawScene() {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.clearRect(0, 0, w, h);
+
+            // 1. Grade sutil de perspectiva apontando para a bancada
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+            ctx.lineWidth = 1;
+
+            const vanishingX = w / 2;
+            for (let x = 0; x <= w; x += 120) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(vanishingX + (x - vanishingX) * 0.45, h * 0.78);
+                ctx.stroke();
+            }
+
+            for (let y = h * 0.15; y <= h * 0.75; y += h * 0.15) {
+                ctx.beginPath();
+                ctx.moveTo(w * 0.05, y);
+                ctx.lineTo(w * 0.95, y);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // 2. Área Frontal da Bancada (na base da tela - alinhada com Y >= 825)
+            ctx.save();
+            const standY = h * 0.825;
+            const standH = h * 0.175;
+            const standW = w * 0.52;
+            const standX = (w - standW) / 2;
+
+            const gradBase = ctx.createLinearGradient(0, standY, 0, h);
+            gradBase.addColorStop(0, 'rgba(0, 255, 136, 0.08)');
+            gradBase.addColorStop(1, 'rgba(0, 255, 136, 0.01)');
+            ctx.fillStyle = gradBase;
+            ctx.fillRect(standX, standY, standW, standH);
+
+            ctx.strokeStyle = 'rgba(0, 255, 136, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(standX, standY);
+            ctx.lineTo(standX + standW, standY);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(0, 255, 136, 0.85)';
+            ctx.font = 'bold 13px system-ui, sans-serif';
+            ctx.letterSpacing = '3px';
+            ctx.textAlign = 'center';
+            ctx.fillText('ÁREA DE ENGAJAMENTO DA BANCADA', w / 2, standY + 28);
+            ctx.restore();
+
+            // 3. Renderização dos Cometas
+            tracks.forEach(t => {
+                const trail = t.trail || [t.pos];
+                if (trail.length === 0) return;
+
+                // Cores solicitadas:
+                // Verde: na área de engajamento da bancada
+                // Azul: prestando atenção / olhando para o stand
+                // Laranja: em trânsito
+                let corHex, corRgb;
+                if (t.na_zona) {
+                    corHex = '#00ff88';
+                    corRgb = '0, 255, 136';
+                } else if (t.olhando) {
+                    corHex = '#00e5ff';
+                    corRgb = '0, 229, 255';
+                } else {
+                    corHex = '#ff8800';
+                    corRgb = '255, 136, 0';
+                }
+
+                const mappedTrail = trail.map(pt => [
+                    (pt[0] / 1000.0) * w,
+                    (pt[1] / 1000.0) * h
+                ]);
+
+                ctx.save();
+                for (let i = 1; i < mappedTrail.length; i++) {
+                    const ratio = i / mappedTrail.length;
+                    const alpha = Math.pow(ratio, 1.8) * 0.85;
+
+                    ctx.beginPath();
+                    ctx.moveTo(mappedTrail[i - 1][0], mappedTrail[i - 1][1]);
+                    ctx.lineTo(mappedTrail[i][0], mappedTrail[i][1]);
+                    ctx.strokeStyle = `rgba(${corRgb}, ${alpha})`;
+                    ctx.lineWidth = 2 + ratio * 6;
+                    ctx.lineCap = 'round';
+                    ctx.stroke();
+                }
+
+                const head = mappedTrail[mappedTrail.length - 1];
+
+                // Halo de brilho
+                const aura = ctx.createRadialGradient(head[0], head[1], 2, head[0], head[1], 24);
+                aura.addColorStop(0, `rgba(${corRgb}, 0.6)`);
+                aura.addColorStop(0.5, `rgba(${corRgb}, 0.15)`);
+                aura.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                ctx.fillStyle = aura;
+                ctx.beginPath();
+                ctx.arc(head[0], head[1], 24, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Núcleo
+                ctx.beginPath();
+                ctx.arc(head[0], head[1], 6, 0, Math.PI * 2);
+                ctx.fillStyle = corHex;
+                ctx.shadowColor = corHex;
+                ctx.shadowBlur = 15;
+                ctx.fill();
+
+                // Ponto de luz central
+                ctx.beginPath();
+                ctx.arc(head[0], head[1], 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+
+                ctx.restore();
+
+                // Partículas
+                if (Math.random() < 0.35) {
+                    particles.push({
+                        x: head[0] + (Math.random() - 0.5) * 8,
+                        y: head[1] + (Math.random() - 0.5) * 8,
+                        vx: (Math.random() - 0.5) * 1.5,
+                        vy: (Math.random() - 0.5) * 1.5,
+                        alpha: 0.9,
+                        color: corRgb,
+                        size: Math.random() * 2.5 + 1.2
+                    });
+                }
+            });
+
+            // 4. Partículas cintilantes
+            ctx.save();
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.alpha -= 0.035;
+
+                if (p.alpha <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(${p.color}, ${p.alpha})`;
+                ctx.fill();
+            }
+            ctx.restore();
+
+            requestAnimationFrame(drawScene);
+        }
+
+        drawScene();
+    </script>
+</body>
+</html>

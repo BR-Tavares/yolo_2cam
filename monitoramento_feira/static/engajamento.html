@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Centro de Engajamento — Bancada Interativa</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background-color: #030712;
+            color: #ffffff;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            position: relative;
+        }
+
+        #bg-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .main-card {
+            position: relative;
+            z-index: 10;
+            text-align: center;
+            max-width: 780px;
+            width: 92%;
+            padding: 40px 48px;
+            border-radius: 32px;
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(28px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.75);
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .header-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .brand-title {
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 2.5px;
+            text-transform: uppercase;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .brand-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00e5ff;
+            box-shadow: 0 0 10px #00e5ff;
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #10b981;
+            background: rgba(16, 185, 129, 0.12);
+            padding: 5px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #10b981;
+            box-shadow: 0 0 8px #10b981;
+            animation: pulse 1.6s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.9); opacity: 0.8; }
+            50% { transform: scale(1.3); opacity: 1; }
+            100% { transform: scale(0.9); opacity: 0.8; }
+        }
+
+        /* ESTADO DE ESPERA / OCIOSO */
+        .idle-box {
+            display: block;
+            padding: 20px 0;
+        }
+
+        .idle-icon {
+            font-size: 56px;
+            margin-bottom: 18px;
+            display: inline-block;
+            animation: floatAnim 3s ease-in-out infinite;
+        }
+
+        @keyframes floatAnim {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        .idle-title {
+            font-size: 38px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, #ffffff 0%, #94a3b8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .idle-desc {
+            font-size: 17px;
+            color: #64748b;
+            max-width: 520px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        /* ESTADO ATIVO COM PESSOAS CONECTADAS */
+        .active-box {
+            display: none;
+        }
+
+        .counter-section {
+            margin: 10px 0 24px 0;
+        }
+
+        .big-number-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+
+        .hero-count {
+            font-size: 88px;
+            font-weight: 900;
+            line-height: 1;
+            background: linear-gradient(135deg, #00ff88 0%, #00e5ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 35px rgba(0, 229, 255, 0.4);
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .count-labels {
+            text-align: left;
+        }
+
+        .count-main-label {
+            font-size: 22px;
+            font-weight: 800;
+            color: #ffffff;
+            letter-spacing: 0.5px;
+        }
+
+        .count-sub-label {
+            font-size: 14px;
+            color: #00e5ff;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        /* HYPE BANNER */
+        .hype-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 15px;
+            font-weight: 700;
+            padding: 8px 22px;
+            border-radius: 999px;
+            background: rgba(0, 229, 255, 0.12);
+            border: 1px solid rgba(0, 229, 255, 0.3);
+            color: #00e5ff;
+            margin-bottom: 24px;
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.15);
+        }
+
+        /* BARRA DE ENERGIA COLETIVA */
+        .energy-wrapper {
+            margin-bottom: 28px;
+        }
+
+        .energy-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #94a3b8;
+            margin-bottom: 8px;
+        }
+
+        .energy-val {
+            color: #00ff88;
+        }
+
+        .energy-bar-bg {
+            width: 100%;
+            height: 12px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 999px;
+            overflow: hidden;
+            padding: 2px;
+        }
+
+        .energy-bar-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #00e5ff 0%, #00ff88 100%);
+            box-shadow: 0 0 14px rgba(0, 255, 136, 0.6);
+            transition: width 0.3s ease;
+        }
+
+        /* LISTA DINÂMICA DE VISITANTES */
+        .audience-title {
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: #64748b;
+            text-align: left;
+            margin-bottom: 12px;
+        }
+
+        .audience-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+        }
+
+        .visitor-card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 14px 16px;
+            text-align: left;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .visitor-card.looking {
+            background: rgba(0, 229, 255, 0.08);
+            border-color: rgba(0, 229, 255, 0.4);
+            box-shadow: 0 0 16px rgba(0, 229, 255, 0.15);
+        }
+
+        .visitor-avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .visitor-card.looking .visitor-avatar {
+            background: linear-gradient(135deg, rgba(0, 229, 255, 0.3), rgba(0, 255, 136, 0.3));
+            border: 1px solid #00e5ff;
+        }
+
+        .visitor-info {
+            flex: 1;
+        }
+
+        .visitor-name {
+            font-size: 14px;
+            font-weight: 700;
+            color: #f1f5f9;
+        }
+
+        .visitor-status {
+            font-size: 11px;
+            font-weight: 600;
+            color: #94a3b8;
+            margin-top: 2px;
+        }
+
+        .visitor-card.looking .visitor-status {
+            color: #00ff88;
+        }
+
+        .visitor-time {
+            font-size: 12px;
+            font-weight: 800;
+            color: #00e5ff;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="bg-canvas"></canvas>
+
+    <div class="main-card">
+        <div class="header-bar">
+            <div class="brand-title">
+                <div class="brand-dot"></div>
+                Centro de Engajamento
+            </div>
+            <div class="status-pill">
+                <div class="pulse-dot"></div>
+                Ao Vivo — Bancada
+            </div>
+        </div>
+
+        <!-- ESTADO 1: OCIOSO (0 pessoas olhando) -->
+        <div id="idleState" class="idle-box">
+            <div class="idle-icon">👋</div>
+            <h1 class="idle-title">Aproxime-se da Bancada</h1>
+            <p class="idle-desc">Fique à vontade para interagir! Nossa equipe e soluções inteligentes estão prontas para atender você.</p>
+        </div>
+
+        <!-- ESTADO 2: ATIVO (1+ pessoas conectadas) -->
+        <div id="activeState" class="active-box">
+            <div class="counter-section">
+                <div class="big-number-row">
+                    <span id="heroNumber" class="hero-count">0</span>
+                    <div class="count-labels">
+                        <div id="heroTitle" class="count-main-label">Pessoa Olhando</div>
+                        <div class="count-sub-label">Atenção Visual Conectada</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="hypeBadge" class="hype-badge">
+                <span id="hypeIcon">👀</span>
+                <span id="hypeText">Conexão visual iniciada</span>
+            </div>
+
+            <div class="energy-wrapper">
+                <div class="energy-header">
+                    <span>Energia de Conexão Coletiva</span>
+                    <span id="energyVal" class="energy-val">0%</span>
+                </div>
+                <div class="energy-bar-bg">
+                    <div id="energyFill" class="energy-bar-fill"></div>
+                </div>
+            </div>
+
+            <div class="audience-title">Visitantes na Área da Bancada (<span id="totalPresente">0</span>)</div>
+            <div id="audienceGrid" class="audience-grid"></div>
+        </div>
+    </div>
+
+    <script>
+        // Canvas de partículas do fundo
+        const bgCanvas = document.getElementById('bg-canvas');
+        const bgCtx = bgCanvas.getContext('2d');
+        let particles = [];
+
+        function resizeCanvas() {
+            bgCanvas.width = window.innerWidth;
+            bgCanvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        for (let i = 0; i < 40; i++) {
+            particles.push({
+                x: Math.random() * bgCanvas.width,
+                y: Math.random() * bgCanvas.height,
+                vx: (Math.random() - 0.5) * 0.4,
+                vy: (Math.random() - 0.5) * 0.4,
+                radius: Math.random() * 2 + 1,
+                alpha: Math.random() * 0.3 + 0.1
+            });
+        }
+
+        function drawParticles() {
+            bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+            particles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                if (p.x < 0) p.x = bgCanvas.width;
+                if (p.x > bgCanvas.width) p.x = 0;
+                if (p.y < 0) p.y = bgCanvas.height;
+                if (p.y > bgCanvas.height) p.y = 0;
+
+                bgCtx.beginPath();
+                bgCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                bgCtx.fillStyle = `rgba(0, 229, 255, ${p.alpha})`;
+                bgCtx.fill();
+            });
+            requestAnimationFrame(drawParticles);
+        }
+        requestAnimationFrame(drawParticles);
+
+        // Polling do backend de engajamento
+        const idleState = document.getElementById('idleState');
+        const activeState = document.getElementById('activeState');
+        const heroNumber = document.getElementById('heroNumber');
+        const heroTitle = document.getElementById('heroTitle');
+        const hypeText = document.getElementById('hypeText');
+        const hypeIcon = document.getElementById('hypeIcon');
+        const energyVal = document.getElementById('energyVal');
+        const energyFill = document.getElementById('energyFill');
+        const audienceGrid = document.getElementById('audienceGrid');
+        const totalPresente = document.getElementById('totalPresente');
+
+        async function updateEngagement() {
+            try {
+                const res = await fetch('/api/engajamento');
+                if (!res.ok) return;
+                const data = await res.json();
+
+                const totalOlhando = data.total_olhando || 0;
+                const totalPresentes = data.count || 0;
+                const pessoas = data.pessoas || [];
+
+                // Se houver pelo menos 1 pessoa presente ou olhando
+                if (totalPresentes > 0 || totalOlhando > 0) {
+                    idleState.style.display = 'none';
+                    activeState.style.display = 'block';
+
+                    heroNumber.textContent = totalOlhando;
+                    heroTitle.textContent = totalOlhando === 1 ? 'Pessoa Olhando' : 'Pessoas Olhando';
+
+                    // Mensagens e Hype por número de pessoas olhando
+                    if (totalOlhando === 0) {
+                        hypeIcon.textContent = '🚶';
+                        hypeText.textContent = `${totalPresentes} visitante(s) na bancada — Aguardando olhar`;
+                    } else if (totalOlhando === 1) {
+                        hypeIcon.textContent = '👀';
+                        hypeText.textContent = '1 visitante prestando atenção na bancada!';
+                    } else if (totalOlhando === 2) {
+                        hypeIcon.textContent = '⚡';
+                        hypeText.textContent = 'Dupla atenção! Conexão simultânea!';
+                    } else {
+                        hypeIcon.textContent = '🔥';
+                        hypeText.textContent = `Atenção coletiva em alta! ${totalOlhando} olhares conectados!`;
+                    }
+
+                    // Energia coletiva (porcentagem)
+                    const energiaPerc = Math.min(100, Math.round((data.energia_coletiva || 0) * 100));
+                    energyVal.textContent = `${energiaPerc}%`;
+                    energyFill.style.width = `${energiaPerc}%`;
+
+                    totalPresente.textContent = totalPresentes;
+
+                    // Cards dos visitantes
+                    audienceGrid.innerHTML = '';
+                    pessoas.forEach((p, idx) => {
+                        const card = document.createElement('div');
+                        card.className = `visitor-card ${p.facing ? 'looking' : ''}`;
+                        card.innerHTML = `
+                            <div class="visitor-avatar">${p.facing ? '👀' : '👤'}</div>
+                            <div class="visitor-info">
+                                <div class="visitor-name">Visitante #${idx + 1}</div>
+                                <div class="visitor-status">${p.facing ? 'Olhando p/ Bancada' : 'Na Área'}</div>
+                            </div>
+                            <div class="visitor-time">${p.facing ? p.facing_time + 's' : p.dwell_time + 's'}</div>
+                        `;
+                        audienceGrid.appendChild(card);
+                    });
+
+                } else {
+                    // Ninguém na bancada
+                    idleState.style.display = 'block';
+                    activeState.style.display = 'none';
+                }
+            } catch (e) {
+                // Silencioso em reconexões
+            }
+        }
+
+        setInterval(updateEngagement, 150);
+    </script>
+</body>
+</html>

@@ -44,4 +44,14 @@ wheels/
 # Logs e arquivos temporários
 *.log
 logs/
+log/
 .pytest_cache/
+
+# Modelos pré-treinados e pesos (download automático sob demanda)
+*.pt
+*.onnx
+*.engine
+
+# Bancos de dados locais SQLite
+*.db
+*.sqlite3

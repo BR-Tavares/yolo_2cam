@@ -1,0 +1,72 @@
+{
+    "camera_a_source": 0,
+    "camera_b_source": 1,
+    "camera_a_enabled": true,
+    "camera_b_enabled": true,
+    "single_camera_mode": true,
+    "radar_dim": 1000,
+    "inverter_eixo_x": true,
+    "homografia_src_pts": [
+        [
+            120.0,
+            150.0
+        ],
+        [
+            520.0,
+            150.0
+        ],
+        [
+            600.0,
+            450.0
+        ],
+        [
+            40.0,
+            450.0
+        ]
+    ],
+    "homografia_dst_pts": [
+        [
+            200.0,
+            200.0
+        ],
+        [
+            800.0,
+            200.0
+        ],
+        [
+            800.0,
+            800.0
+        ],
+        [
+            200.0,
+            800.0
+        ]
+    ],
+    "zona_poligono": [
+        [
+            280.0,
+            825.0
+        ],
+        [
+            720.0,
+            825.0
+        ],
+        [
+            760.0,
+            995.0
+        ],
+        [
+            240.0,
+            995.0
+        ]
+    ],
+    "yaw_limiar": 35.0,
+    "pitch_limiar": 35.0,
+    "min_dwell_time": 3.0,
+    "saturation_dwell_time": 30.0,
+    "session_timeout": 2.0,
+    "db_path": "C:\\Users\\andre\\Documents\\Sistemas\\Jev_yolo\\monitoramento_feira\\feira_monitoramento.db",
+    "api_host": "0.0.0.0",
+    "api_port": 8000,
+    "dashboard_port": 8501
+}
