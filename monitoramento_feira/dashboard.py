@@ -198,14 +198,41 @@ with tabs[2]:
     st.subheader("Audience Measurement — Métricas de Fluxo e Engajamento")
     st.caption("Consolidação estatística em série temporal de tráfego, atratividade e atenção na bancada.")
 
-    col_btn1, col_btn2, _ = st.columns([1, 1.5, 2.5])
+    # Consulta estado em tempo real da câmera
+    live_tracks = 0
+    live_looking = 0
+    try:
+        import urllib.request, json
+        req = urllib.request.Request(f"http://localhost:{cfg.api_port}/api/engajamento")
+        with urllib.request.urlopen(req, timeout=1.0) as resp:
+            live_data = json.loads(resp.read().decode())
+            live_tracks = live_data.get("count", 0)
+            live_looking = live_data.get("total_olhando", 0)
+    except Exception:
+        pass
+
+    st.info(f"🟢 **Ao Vivo Agora na Câmera**: **{live_tracks}** visitante(s) presente(s) | **{live_looking}** olhando diretamente para a bancada neste instante. (Os números abaixo refletem o **histórico acumulado** gravado no banco de dados).")
+
+    col_btn1, col_btn2, col_btn3, _ = st.columns([1, 1.4, 1.4, 1])
     with col_btn1:
-        if st.button("🔄 Atualizar Métricas", use_container_width=True):
+        if st.button("🔄 Atualizar", use_container_width=True, help="Recarrega a leitura dos dados do banco sem apagar nada"):
             st.rerun()
     with col_btn2:
-        if st.button("⚡ Consolidar Janela Agora (Demo)", type="secondary", use_container_width=True, help="Executa o agregador estatístico imediatamente para demonstração ao vivo sem aguardar o ciclo de 5 minutos"):
+        if st.button("⚡ Consolidar Janela", type="secondary", use_container_width=True, help="Executa o agregador estatístico imediatamente para demonstração ao vivo sem aguardar o ciclo de 5 minutos"):
             novo_id = db.agregar_janela(janela_segundos=300.0)
             st.toast(f"Janela estatística #{novo_id} consolidada com sucesso!", icon="📊")
+            time.sleep(0.5)
+            st.rerun()
+    with col_btn3:
+        if st.button("🗑️ Zerar Histórico", use_container_width=True, help="Limpa o banco de dados e a memória para iniciar uma nova demonstração do zero"):
+            db.limpar_historico()
+            try:
+                import urllib.request
+                req = urllib.request.Request(f"http://localhost:{cfg.api_port}/api/reset", data=b"{}", headers={"Content-Type": "application/json"})
+                urllib.request.urlopen(req, timeout=1.5)
+            except Exception:
+                pass
+            st.toast("Histórico e sessões zerados com sucesso!", icon="🧹")
             time.sleep(0.5)
             st.rerun()
 

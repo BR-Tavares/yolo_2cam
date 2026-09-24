@@ -175,3 +175,11 @@ class Database:
                 "capture_rate": cap_rate,
                 "engagement_rate": eng_rate
             }
+
+    def limpar_historico(self):
+        """Limpa as tabelas de histórico para reiniciar a contagem da feira do zero."""
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM sessoes_trajetoria")
+            conn.execute("DELETE FROM sessoes_engajamento")
+            conn.execute("DELETE FROM agregados_janela")
+            conn.commit()

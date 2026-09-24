@@ -125,3 +125,14 @@ def api_recalibrate(payload: Dict[str, Any]):
             zona_poligono=app_config.zona_poligono
         )
     return {"success": True, "src_pts": src_pts}
+
+@app.post("/api/reset")
+def api_reset():
+    global trajectory_state, engagement_state
+    if trajectory_state:
+        with trajectory_state.lock:
+            trajectory_state.active.clear()
+    if engagement_state:
+        with engagement_state.lock:
+            engagement_state.active.clear()
+    return {"success": True, "message": "Memória de rastreamento resetada com sucesso"}
